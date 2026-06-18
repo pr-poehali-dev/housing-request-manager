@@ -1,0 +1,13 @@
+{
+  "tests": [
+    {
+      "name": "Unauthorized",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "excel"},
+      "expectedStatus": 401,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

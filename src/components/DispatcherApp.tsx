@@ -7,8 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { api, User, Request } from '@/lib/api';
+import { api, User, Request, downloadBase64 } from '@/lib/api';
 
 const STATUS_STYLES: Record<string, string> = {
   new: 'bg-primary/10 text-primary border-primary/20',
@@ -37,8 +38,126 @@ const BOTTOM_NAV = [
   { id: 'dashboard', label: 'Дашборд', icon: 'LayoutDashboard' },
   { id: 'requests', label: 'Заявки', icon: 'ClipboardList' },
   { id: 'masters', label: 'Мастера', icon: 'Wrench' },
+  { id: 'reports', label: 'Отчёты', icon: 'FileText' },
 ];
 
+// ── Экран отчётов ─────────────────────────────────────────────────────────────
+function ReportsScreen() {
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [loading, setLoading] = useState<'excel' | 'pdf' | null>(null);
+
+  const download = async (format: 'excel' | 'pdf') => {
+    setLoading(format);
+    try {
+      const res = await api.downloadReport({
+        action: format,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        status_filter: statusFilter,
+      });
+      downloadBase64(res.data, res.filename, res.mime);
+      toast.success(`${format === 'excel' ? 'Excel' : 'PDF'} отчёт скачан`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Ошибка генерации отчёта');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="bg-primary rounded-2xl px-5 py-5 text-primary-foreground">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
+            <Icon name="FileText" size={22} />
+          </div>
+          <div>
+            <p className="font-extrabold text-lg">Отчёты</p>
+            <p className="text-sm opacity-75">Выгрузка заявок за период</p>
+          </div>
+        </div>
+      </div>
+
+      <Card className="p-5 border-border flex flex-col gap-4">
+        <h2 className="font-bold text-base flex items-center gap-2">
+          <Icon name="Filter" size={16} className="text-primary" />
+          Фильтры
+        </h2>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1.5">
+            <Label className="text-xs">Дата от</Label>
+            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="text-sm" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label className="text-xs">Дата до</Label>
+            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="text-sm" />
+          </div>
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label className="text-xs">Статус заявок</Label>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все статусы</SelectItem>
+              {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </Card>
+
+      <div className="grid gap-3">
+        <button
+          onClick={() => download('excel')}
+          disabled={!!loading}
+          className="flex items-center gap-4 p-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-all disabled:opacity-60"
+        >
+          <div className="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center shrink-0">
+            {loading === 'excel'
+              ? <Icon name="Loader" size={22} className="text-white animate-spin" />
+              : <Icon name="Table" size={22} className="text-white" />}
+          </div>
+          <div className="text-left">
+            <p className="font-bold text-emerald-800">Скачать Excel</p>
+            <p className="text-xs text-emerald-600">Таблица для Excel / Google Sheets</p>
+          </div>
+          <Icon name="Download" size={18} className="text-emerald-500 ml-auto" />
+        </button>
+
+        <button
+          onClick={() => download('pdf')}
+          disabled={!!loading}
+          className="flex items-center gap-4 p-4 rounded-2xl border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-all disabled:opacity-60"
+        >
+          <div className="w-12 h-12 rounded-xl bg-red-500 flex items-center justify-center shrink-0">
+            {loading === 'pdf'
+              ? <Icon name="Loader" size={22} className="text-white animate-spin" />
+              : <Icon name="FileText" size={22} className="text-white" />}
+          </div>
+          <div className="text-left">
+            <p className="font-bold text-red-800">Скачать PDF</p>
+            <p className="text-xs text-red-600">Готовый документ для печати</p>
+          </div>
+          <Icon name="Download" size={18} className="text-red-400 ml-auto" />
+        </button>
+      </div>
+
+      <Card className="p-4 border-border bg-secondary/40">
+        <div className="flex items-start gap-3">
+          <Icon name="Info" size={16} className="text-muted-foreground mt-0.5 shrink-0" />
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Отчёт включает: номер заявки, категорию, адрес, жильца, мастера, статус, приоритет, время создания и закрытия, время выполнения и комментарий диспетчера.
+          </p>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ── Основной компонент ────────────────────────────────────────────────────────
 export default function DispatcherApp({ user, onLogout }: Props) {
   const [tab, setTab] = useState('dashboard');
   const [requests, setRequests] = useState<Request[]>([]);
@@ -49,6 +168,7 @@ export default function DispatcherApp({ user, onLogout }: Props) {
   const [selected, setSelected] = useState<Request | null>(null);
   const [assignMasterId, setAssignMasterId] = useState('');
   const [assignStatus, setAssignStatus] = useState('');
+  const [closeComment, setCloseComment] = useState('');
   const [updating, setUpdating] = useState(false);
 
   const load = async () => {
@@ -85,18 +205,26 @@ export default function DispatcherApp({ user, onLogout }: Props) {
     setSelected(r);
     setAssignMasterId(r.master_id ? String(r.master_id) : '');
     setAssignStatus(r.status);
+    setCloseComment(r.close_comment || '');
   };
 
   const saveUpdate = async () => {
     if (!selected) return;
+    if (assignStatus === 'done' && !closeComment.trim()) {
+      toast.error('Добавьте комментарий для жильца при закрытии заявки');
+      return;
+    }
     setUpdating(true);
     try {
       await api.updateRequest({
         id: selected.id,
         status: assignStatus || undefined,
         master_id: assignMasterId ? Number(assignMasterId) : undefined,
+        close_comment: closeComment.trim() || undefined,
       });
-      toast.success('Заявка обновлена');
+      toast.success('Заявка обновлена', {
+        description: assignStatus === 'done' ? 'Жилец увидит ваш комментарий в уведомлениях' : undefined,
+      });
       setSelected(null);
       load();
     } catch (e: unknown) {
@@ -125,7 +253,7 @@ export default function DispatcherApp({ user, onLogout }: Props) {
       </header>
 
       <div className="flex-1 px-4 pt-5 pb-28 overflow-y-auto">
-        {loading ? (
+        {loading && tab !== 'reports' ? (
           <div className="flex items-center justify-center py-20">
             <Icon name="Loader" size={28} className="text-primary animate-spin" />
           </div>
@@ -135,7 +263,7 @@ export default function DispatcherApp({ user, onLogout }: Props) {
             {tab === 'dashboard' && (
               <div className="flex flex-col gap-5">
                 <div className="bg-primary rounded-2xl px-5 py-5 text-primary-foreground">
-                  <p className="text-sm opacity-80">Сегодня, смена дневная</p>
+                  <p className="text-sm opacity-80">Смена дневная</p>
                   <p className="text-xl font-extrabold mt-1">Добро пожаловать, {user.name.split(' ')[0]}</p>
                   <div className="grid grid-cols-3 gap-3 mt-4">
                     {[
@@ -177,7 +305,10 @@ export default function DispatcherApp({ user, onLogout }: Props) {
                 </div>
 
                 <div>
-                  <h2 className="font-bold mb-3">Мастера</h2>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="font-bold">Мастера</h2>
+                    <button onClick={() => setTab('masters')} className="text-sm text-primary font-medium">Все</button>
+                  </div>
                   <div className="flex flex-col gap-2">
                     {masters.map((m) => (
                       <div key={m.id} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card">
@@ -195,6 +326,21 @@ export default function DispatcherApp({ user, onLogout }: Props) {
                     ))}
                   </div>
                 </div>
+
+                {/* Quick report */}
+                <button
+                  onClick={() => setTab('reports')}
+                  className="flex items-center gap-3 p-4 rounded-2xl border border-border bg-card hover:bg-secondary transition-all"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
+                    <Icon name="FileText" size={20} className="text-violet-600" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="font-semibold text-sm">Скачать отчёт</p>
+                    <p className="text-xs text-muted-foreground">Excel или PDF по всем заявкам</p>
+                  </div>
+                  <Icon name="ChevronRight" size={16} className="text-muted-foreground" />
+                </button>
               </div>
             )}
 
@@ -274,21 +420,24 @@ export default function DispatcherApp({ user, onLogout }: Props) {
                 })}
               </div>
             )}
+
+            {/* Reports */}
+            {tab === 'reports' && <ReportsScreen />}
           </>
         )}
       </div>
 
       {/* Bottom nav */}
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-card border-t border-border z-20">
-        <div className="grid grid-cols-3 px-2 py-2">
+        <div className="grid grid-cols-4 px-2 py-2">
           {BOTTOM_NAV.map((n) => (
             <button key={n.id} onClick={() => setTab(n.id)}
               className={`flex flex-col items-center gap-1 py-2 rounded-xl transition-all relative ${tab === n.id ? 'text-primary' : 'text-muted-foreground'}`}>
               {tab === n.id && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-full" />}
-              <Icon name={n.icon} size={22} />
+              <Icon name={n.icon} size={20} />
               <span className="text-[10px] font-semibold">{n.label}</span>
               {n.id === 'requests' && stats.new > 0 && (
-                <span className="absolute top-1.5 right-4 w-4 h-4 bg-primary rounded-full text-[9px] text-primary-foreground flex items-center justify-center font-bold">{stats.new}</span>
+                <span className="absolute top-1.5 right-3 w-4 h-4 bg-primary rounded-full text-[9px] text-primary-foreground flex items-center justify-center font-bold">{stats.new}</span>
               )}
             </button>
           ))}
@@ -297,33 +446,33 @@ export default function DispatcherApp({ user, onLogout }: Props) {
 
       {/* Request detail sheet */}
       <Sheet open={!!selected} onOpenChange={() => setSelected(null)}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto">
           {selected && (
             <>
               <SheetHeader className="mb-4">
                 <SheetTitle>Заявка №{selected.id}</SheetTitle>
               </SheetHeader>
               <div className="space-y-4">
-                <div className="space-y-2">
+                <div className="space-y-0">
                   {[
                     { label: 'Категория', value: selected.category },
                     { label: 'Адрес', value: selected.address },
                     { label: 'Жилец', value: `${selected.resident_name} · ${selected.resident_phone}` },
                     { label: 'Приоритет', value: selected.priority_label },
                   ].map((item) => (
-                    <div key={item.label} className="flex justify-between items-start py-2 border-b border-border">
-                      <span className="text-sm text-muted-foreground">{item.label}</span>
-                      <span className="text-sm font-semibold text-right max-w-[55%]">{item.value}</span>
+                    <div key={item.label} className="flex justify-between items-start py-2.5 border-b border-border">
+                      <span className="text-sm text-muted-foreground shrink-0">{item.label}</span>
+                      <span className="text-sm font-semibold text-right max-w-[58%]">{item.value}</span>
                     </div>
                   ))}
-                  <div className="py-2 border-b border-border">
+                  <div className="py-2.5 border-b border-border">
                     <span className="text-sm text-muted-foreground block mb-1">Описание</span>
                     <p className="text-sm">{selected.description}</p>
                   </div>
                 </div>
 
                 <div className="grid gap-3">
-                  <div className="grid gap-2">
+                  <div className="grid gap-1.5">
                     <Label>Статус</Label>
                     <Select value={assignStatus} onValueChange={setAssignStatus}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
@@ -332,7 +481,7 @@ export default function DispatcherApp({ user, onLogout }: Props) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid gap-2">
+                  <div className="grid gap-1.5">
                     <Label>Назначить мастера</Label>
                     <Select value={assignMasterId} onValueChange={setAssignMasterId}>
                       <SelectTrigger><SelectValue placeholder="Выберите мастера" /></SelectTrigger>
@@ -340,6 +489,30 @@ export default function DispatcherApp({ user, onLogout }: Props) {
                         {masters.map((m) => <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* Сообщение жильцу — всегда видно, обязательно при закрытии */}
+                  <div className="grid gap-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <Icon name="MessageSquare" size={14} className="text-primary" />
+                      Сообщение жильцу
+                      {assignStatus === 'done' && <span className="text-red-500 text-xs font-normal ml-1">* обязательно</span>}
+                    </Label>
+                    <Textarea
+                      placeholder={assignStatus === 'done'
+                        ? 'Опишите что было сделано, жилец увидит это в уведомлениях...'
+                        : 'Необязательное сообщение для жильца...'}
+                      rows={3}
+                      value={closeComment}
+                      onChange={(e) => setCloseComment(e.target.value)}
+                      className={assignStatus === 'done' && !closeComment.trim() ? 'border-red-300 focus:border-red-400' : ''}
+                    />
+                    {assignStatus === 'done' && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Icon name="Bell" size={11} />
+                        Жилец получит уведомление с этим сообщением
+                      </p>
+                    )}
                   </div>
                 </div>
 
